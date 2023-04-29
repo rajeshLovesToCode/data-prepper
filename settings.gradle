@@ -109,3 +109,6 @@ include 'rss-source'
 include 'data-prepper-plugins:failures-common'
 include 'data-prepper-plugins:newline-codecs'
 include 'data-prepper-plugins:avro-codecs'
+include 'data-prepper-plugins:opensearch-source'
+findProject(':data-prepper-plugins:opensearch-source')?.name = 'opensearch-source'
+
