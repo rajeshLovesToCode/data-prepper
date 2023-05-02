@@ -1,0 +1,32 @@
+opensearch-pipeline:
+  source:
+     opensearch:
+             aws:
+                  region: "us-east-1"
+                  sts_role_arn: "arn:aws:iam::278936200144:role/aos-role"
+             hosts: ["http://localhost:9200/"]
+             indices:
+                   include:
+                        - "movies"
+                   exclude:
+                        - ""
+             scheduling:
+                   rate: "P8TH"
+                   job_count: 3
+                   start_time: "some_timestamp"
+             query:
+                   fields: ["play_name : hamlet","speaker : 1"]
+             search_options:
+                   batch_size: 1000
+                   expand_wildcards: "open"
+                   sorting:
+                       sort_key: ["play_id","play_name"]
+                       order: "asc"
+             insecure: true
+             username: "admin"
+             password: "admin"
+             cert: "cert"
+             socket_timeout: ""
+             connection_timeout: ""
+  sink:
+    - stdout:
