@@ -47,8 +47,8 @@ public class OpenSearchSource implements Source<Record<Event>> {
             if (Boolean.TRUE.equals(sourceInfo.getHealthStatus())) {
                 PrepareConnection prepareConnection = new PrepareConnection();
                 client = prepareConnection.prepareElasticSearchConnection();
-                List<IndicesRecord> indexInfos =  sourceInfoProvider.callCatIndices(client);
-                HashMap<String,String> indexMap = sourceInfoProvider.getIndexMap(indexInfos);
+                List<IndicesRecord> catIndices =  sourceInfoProvider.callCatIndices(client);
+                HashMap<String,String> indexMap = sourceInfoProvider.getIndexMap(catIndices);
                 openSearchSourceConfig.setIndexNames(indexMap);
                 LOG.info("Indexes  are {} :  " , indexMap);
                 sourceInfoProvider.versionCheck(openSearchSourceConfig,sourceInfo,client,buffer);

@@ -133,12 +133,24 @@ public class SourceInfoProvider {
             LOG.info("Pit Id is  {} ", pitId);
             String getSearchResponseBody = elasticSearchApiCalls.searchPitIndexes(pitId, openSearchSourceConfig, client);
             LOG.info("Search After Response :{} ", getSearchResponseBody);
+            LOG.info("Delete Operation starts");
+            Boolean deleteResult = elasticSearchApiCalls.delete(pitId, client, osVersionIntegerValue);
+            if(deleteResult){
+                LOG.info("Delete operation performed successfully");
+            }
+            else {
+                LOG.info("Delete operation failed");
+            }
+            LOG.info("Delete operation ends");
         } else if (sourceInfo.getDataSource().equalsIgnoreCase(ELASTIC_SEARCH) && (osVersionIntegerValue < VERSION_7_10_0)) {
             ElasticSearchApiCalls elasticSearchApiCalls = new ElasticSearchApiCalls();
             String scrollId = elasticSearchApiCalls.generateScrollId(openSearchSourceConfig, client);
             ScrollRequest scrollRequest = elasticSearchApiCalls.nextScrollRequest(scrollId);
             ScrollResponse<ObjectNode> NextsearchResponse = client.scroll(scrollRequest, ObjectNode.class);
             LOG.info("NextsearchResponse is {} " , NextsearchResponse);
+            LOG.info("Delete Operation starts");
+            elasticSearchApiCalls.delete(scrollId,client,osVersionIntegerValue);
+            LOG.info("Delete operation ends");
         }
     }
     public void writeClusterDataToBuffer(String responseBoday, Buffer<Record<Event>> buffer) throws TimeoutException {

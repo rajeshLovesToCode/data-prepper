@@ -11,4 +11,5 @@ public interface SearchAPICalls {
     String searchPitIndexes(final String pitId,final OpenSearchSourceConfig openSearchSourceConfig,final ElasticsearchClient client);
     String generateScrollId(final OpenSearchSourceConfig openSearchSourceConfig, final ElasticsearchClient client);
     String searchScrollIndexes(final OpenSearchSourceConfig openSearchSourceConfig,final ElasticsearchClient client);
+    public Boolean delete(final String pitId,final ElasticsearchClient client,final Integer version);
 }

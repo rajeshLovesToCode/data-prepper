@@ -19,6 +19,9 @@ public class ElasticSearchApiCalls implements SearchAPICalls {
     private static final Logger LOG = LoggerFactory.getLogger(ElasticSearchApiCalls.class);
     private static final String KEEP_ALIVE_VALUE = "24h";
     private static final String TIME_VALUE = "24h";
+    private static final int ELASTICSEARCH_VERSION = 7100;
+
+
     @Override
     public String generatePitId(final OpenSearchSourceConfig openSearchSourceConfig,final ElasticsearchClient client) {
         OpenPointInTimeResponse response = null;
@@ -74,5 +77,37 @@ public class ElasticSearchApiCalls implements SearchAPICalls {
     @Override
     public String searchScrollIndexes(OpenSearchSourceConfig openSearchSourceConfig, ElasticsearchClient client) {
         return null;
+    }
+
+
+    @Override
+    public Boolean delete(final String id,final ElasticsearchClient client,final Integer elasticSearchVersion) {
+        LOG.info("PIT or Scroll ID to be deleted - " + id);
+        try {
+            if (elasticSearchVersion.intValue() >= ELASTICSEARCH_VERSION) {
+                return deletePitId(id, client);
+            } else {
+                return deleteScrollId(id, client);
+
+            }
+
+        } catch (IOException e) {
+            LOG.error("Error occured while closing PIT " + e);
+        }
+        return false;
+    }
+
+    private boolean deleteScrollId(String id, ElasticsearchClient client) throws IOException {
+        ClearScrollRequest scrollRequest=new ClearScrollRequest.Builder().scrollId(id).build();
+        ClearScrollResponse clearScrollResponse = client.clearScroll(scrollRequest);
+        LOG.info("Delete Scroll ID Response "+clearScrollResponse);
+        return  clearScrollResponse.succeeded();
+    }
+
+    private boolean deletePitId(String id, ElasticsearchClient client) throws IOException {
+        ClosePointInTimeRequest request = new ClosePointInTimeRequest.Builder().id(id).build();
+        ClosePointInTimeResponse closePointInTimeResponse = client.closePointInTime(request);
+        LOG.info("Delete PIT ID Response " + closePointInTimeResponse);
+        return closePointInTimeResponse.succeeded();
     }
 }
