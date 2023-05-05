@@ -2,21 +2,28 @@ package org.opensearch.dataprepper.plugins.source;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
+import java.util.List;
+
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 public class IndexParameters {
     @JsonProperty("include")
-    private ArrayList<String> include;
+    private List<String> include;
     @JsonProperty("exclude")
-    private ArrayList<String> exclude;
-    public void setInclude(ArrayList<String> include) {
+    private List<String> exclude;
+    public void setInclude(List<String> include) {
         this.include = include;
     }
     public void setExclude(ArrayList<String> exclude) {
         this.exclude = exclude;
     }
-    public ArrayList<String> getInclude() {
+    public List<String> getInclude() {
         return include;
     }
-    public ArrayList<String> getExclude() {
+    public List<String> getExclude() {
         return exclude;
     }
 }

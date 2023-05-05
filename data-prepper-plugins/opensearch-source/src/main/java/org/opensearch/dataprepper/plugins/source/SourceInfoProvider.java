@@ -22,6 +22,12 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 public class SourceInfoProvider {
     private String datasource;
@@ -42,7 +48,8 @@ public class SourceInfoProvider {
     private static final int VERSION_1_3_0 = 130;
     private  final JsonFactory jsonFactory = new JsonFactory();
     private static final ObjectMapper objectMapper = new ObjectMapper();
-    public String getsourceInfo(OpenSearchSourceConfig openSearchSourceConfig) {
+
+    public String getsourceInfo(final OpenSearchSourceConfig openSearchSourceConfig) {
         try {
             JSONParser jsonParser = new JSONParser();
             StringBuilder response = new StringBuilder();
@@ -79,7 +86,7 @@ public class SourceInfoProvider {
             datasource = ELASTICSEARCH;
         return datasource;
     }
-    public SourceInfo checkStatus(OpenSearchSourceConfig openSearchSourceConfig,SourceInfo sourceInfo) throws IOException, ParseException {
+    public SourceInfo checkStatus(final OpenSearchSourceConfig openSearchSourceConfig,final SourceInfo sourceInfo) throws IOException, ParseException {
         String osVersion = null;
         URL obj = new URL(openSearchSourceConfig.getHosts().get(0) + CLUSTER_STATS_ENDPOINTS);
         HttpURLConnection con = (HttpURLConnection) obj.openConnection();
@@ -116,26 +123,37 @@ public class SourceInfoProvider {
         return sourceInfo;
     }
 
-    public void versionCheck(OpenSearchSourceConfig openSearchSourceConfig, SourceInfo sourceInfo, OpenSearchClient client, Buffer<Record<Event>> buffer) throws TimeoutException, IOException {
+    public void versionCheck(final OpenSearchSourceConfig openSearchSourceConfig, final SourceInfo sourceInfo, final OpenSearchClient client,
+                             Buffer<Record<Event>> buffer)  throws TimeoutException, IOException {
         int osVersionIntegerValue = Integer.parseInt(sourceInfo.getOsVersion().replaceAll(REGULAR_EXPRESSION, ""));
-       // osVersionIntegerValue = 123; to test Scroll API
+        // osVersionIntegerValue = 123; to test Scroll API
         if ((sourceInfo.getDataSource().equalsIgnoreCase(OPENSEARCH))
                 && (osVersionIntegerValue >= VERSION_1_3_0)) {
             OpenSearchApiCalls openSearchApiCalls = new OpenSearchApiCalls();
-            String pitId = openSearchApiCalls.generatePitId(openSearchSourceConfig, client);
-            String getSearchResponseBody = openSearchApiCalls.searchPitIndexes(pitId, openSearchSourceConfig, client);
-            LOG.info("Search After Response :{} " , getSearchResponseBody);
-          //  writeClusterDataToBuffer(getSearchResponseBody,buffer);
+            for (String index : openSearchSourceConfig.getIndexNames().keySet()) {
+                openSearchSourceConfig.setIndexValue(index);
+                String pitId = openSearchApiCalls.generatePitId(openSearchSourceConfig, client);
+                String getSearchResponseBody = openSearchApiCalls.searchPitIndexes(pitId, openSearchSourceConfig, client);
+                LOG.info("Search After Response :{} ", getSearchResponseBody);
+                //  writeClusterDataToBuffer(getSearchResponseBody,buffer);
+                if (pitId != null && !pitId.isBlank()) {
+                    openSearchApiCalls.delete(pitId, client, osVersionIntegerValue);
+                }
+            }
+
         } else if (sourceInfo.getDataSource().equalsIgnoreCase(OPENSEARCH) && (osVersionIntegerValue < VERSION_1_3_0)) {
             OpenSearchApiCalls openSearchApiCalls = new OpenSearchApiCalls();
-            String scrollResponse = openSearchApiCalls.generateScrollId(openSearchSourceConfig, client);
-            LOG.info("Scroll Response : {} " , scrollResponse);
+            String scrollId = openSearchApiCalls.generateScrollId(openSearchSourceConfig, client);
+            LOG.info("Scroll Response : {} ", scrollId);
             String getData = openSearchApiCalls.searchScrollIndexes(openSearchSourceConfig, client);
-            LOG.info("Data in batches : {} " , getData);
-           // writeClusterDataToBuffer(getData,buffer);
+            LOG.info("Data in batches : {} ", getData);
+            // writeClusterDataToBuffer(getData,buffer);
+            if (scrollId != null && !scrollId.isBlank()) {
+                openSearchApiCalls.delete(scrollId, client, osVersionIntegerValue);
+            }
         }
     }
-    public void writeClusterDataToBuffer(String responseBoday, Buffer<Record<Event>> buffer) throws TimeoutException {
+    public void writeClusterDataToBuffer(final String responseBoday,final Buffer<Record<Event>> buffer) throws TimeoutException {
         try {
             LOG.info("Write to buffer code started {} ",buffer);
             final JsonParser jsonParser = jsonFactory.createParser(responseBoday);
@@ -155,12 +173,12 @@ public class SourceInfoProvider {
             buffer.write(jsonRecord, 1200);
         }
     }
-    public List<IndicesRecord> callCatIndices(OpenSearchClient client) throws IOException,ParseException {
+    public List<IndicesRecord> callCatIndices(final OpenSearchClient client) throws IOException,ParseException {
         List<IndicesRecord> indexInfoList = client.cat().indices().valueBody();
         return indexInfoList;
     }
 
-    public HashMap<String, String> getIndexMap(List<IndicesRecord> indexInfos) {
+    public HashMap<String, String> getIndexMap(final List<IndicesRecord> indexInfos) {
         HashMap<String,String> indexMap = new HashMap<>();
         for(IndicesRecord indexInfo : indexInfos) {
             String indexname = indexInfo.index();
@@ -168,5 +186,38 @@ public class SourceInfoProvider {
             indexMap.put(indexname,indexSize);
         }
         return indexMap;
+    }
+
+    public static StringBuilder getIndexList(final OpenSearchSourceConfig openSearchSourceConfig)
+    {
+        List<String> include = openSearchSourceConfig.getIndex().getInclude();
+        List<String> exclude = openSearchSourceConfig.getIndex().getExclude();
+        String includeIndexes = null;
+        String excludeIndexes = null;
+        StringBuilder indexList = new StringBuilder();
+        if(!include.isEmpty())
+            includeIndexes = include.stream().collect(Collectors.joining(","));
+        if(!exclude.isEmpty())
+            excludeIndexes = exclude.stream().collect(Collectors.joining(",-*"));
+        indexList.append(includeIndexes);
+        indexList.append(",-*"+excludeIndexes);
+        return indexList;
+    }
+
+    public  List<IndicesRecord> getIndicesRecords(final OpenSearchSourceConfig openSearchSourceConfig,
+                                                  final List<IndicesRecord>  indicesRecords) {
+        if (openSearchSourceConfig.getIndex().getExclude() != null
+                && !openSearchSourceConfig.getIndex().getExclude().isEmpty()) {
+            List<String> filteredIncludeIndexes = openSearchSourceConfig.getIndex().getInclude().stream()
+                    .filter(index -> !(openSearchSourceConfig.getIndex().getExclude().contains(index))).collect(Collectors.toList());
+            openSearchSourceConfig.getIndex().setInclude(filteredIncludeIndexes);
+        }
+        openSearchSourceConfig.getIndex().getInclude().forEach(index -> {
+            IndicesRecord indexRecord =
+                    new IndicesRecord.Builder().index(index).build();
+            indicesRecords.add(indexRecord);
+
+        });
+        return indicesRecords;
     }
 }

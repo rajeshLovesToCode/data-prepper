@@ -3,8 +3,15 @@ package org.opensearch.dataprepper.plugins.source;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.opensearch.dataprepper.plugins.source.configuration.AwsAuthenticationOptions;
+
 import java.util.ArrayList;
 import java.util.HashMap;
+
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 public class OpenSearchSourceConfig {
     @JsonProperty("hosts")
@@ -33,6 +40,9 @@ public class OpenSearchSourceConfig {
     private String socketTimeout;
     @JsonProperty("connection_timeout")
     private String connection_timeout;
+    private String indexValue;
+
+
     private HashMap<String,String> indexNames;
     public HashMap<String, String> getIndexNames() {
         return indexNames;
@@ -56,4 +66,11 @@ public class OpenSearchSourceConfig {
     public QueryParameters getQuery() {
         return query;
     }
+    public String getIndexValue() {
+        return indexValue;
+    }
+    public void setIndexValue(String indexValue) {
+        this.indexValue = indexValue;
+    }
+
 }

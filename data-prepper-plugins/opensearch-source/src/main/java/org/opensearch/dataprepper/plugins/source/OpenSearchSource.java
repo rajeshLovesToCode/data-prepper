@@ -10,8 +10,17 @@ import org.opensearch.dataprepper.model.source.Source;
 import org.opensearch.dataprepper.model.annotations.DataPrepperPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
+
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 @DataPrepperPlugin(name = "opensearch", pluginType = Source.class, pluginConfigurationType =OpenSearchSourceConfig.class)
 public class OpenSearchSource implements Source<Record<Event>> {
     private final OpenSearchSourceConfig openSearchSourceConfig;
@@ -19,8 +28,7 @@ public class OpenSearchSource implements Source<Record<Event>> {
     private final PluginMetrics pluginMetrics;
     private OpenSearchClient client;
     private SourceInfoProvider sourceInfoProvider;
-    private SourceInfo sourceInfo;
-    private List<IndicesRecord> indexInfos;
+
     @DataPrepperPluginConstructor
     public OpenSearchSource(OpenSearchSourceConfig openSearchSourceConfig, PluginMetrics pluginMetrics) {
         this.openSearchSourceConfig = openSearchSourceConfig;
@@ -33,30 +41,43 @@ public class OpenSearchSource implements Source<Record<Event>> {
         }
         callToApis(openSearchSourceConfig,buffer);
     }
-    private void callToApis(OpenSearchSourceConfig openSearchSourceConfig,Buffer<Record<Event>> buffer)  {
+    private void callToApis(final OpenSearchSourceConfig openSearchSourceConfig,final Buffer<Record<Event>> buffer) {
         try {
-            sourceInfo = new SourceInfo();
-            sourceInfoProvider= new SourceInfoProvider();
+            SourceInfo sourceInfo = new SourceInfo();
+            sourceInfoProvider = new SourceInfoProvider();
             String datasource = sourceInfoProvider.getsourceInfo(openSearchSourceConfig);
             sourceInfo.setDataSource(datasource);
-            LOG.info("Datasource is : {} " , sourceInfo.getDataSource());
-            sourceInfo = sourceInfoProvider.checkStatus(openSearchSourceConfig,sourceInfo);
+            LOG.info("Datasource is : {} ", sourceInfo.getDataSource());
+            sourceInfo = sourceInfoProvider.checkStatus(openSearchSourceConfig, sourceInfo);
             if (Boolean.TRUE.equals(sourceInfo.getHealthStatus())) {
                 PrepareConnection prepareConnection = new PrepareConnection();
                 client = prepareConnection.prepareOpensearchConnection();
-                indexInfos =  sourceInfoProvider.callCatIndices(client);
-                HashMap<String,String> indexMap = sourceInfoProvider.getIndexMap(indexInfos);
+                List<IndicesRecord> catIndices = new ArrayList<>();
+                if (openSearchSourceConfig.getIndex().getInclude() == null ||
+                        openSearchSourceConfig.getIndex().getInclude().isEmpty()) {
+                    catIndices = sourceInfoProvider.callCatIndices(client);
+
+                    //filtering out  based on exclude indices
+                    if (openSearchSourceConfig.getIndex().getExclude() != null
+                            && !openSearchSourceConfig.getIndex().getExclude().isEmpty()) {
+                        catIndices = catIndices.stream().filter(c -> !(openSearchSourceConfig.getIndex().getExclude().contains(c.index()))).
+                                collect(Collectors.toList());
+                    }
+
+
+                } else {
+                    sourceInfoProvider.getIndicesRecords(openSearchSourceConfig, catIndices);
+
+                }
+                HashMap<String, String> indexMap = sourceInfoProvider.getIndexMap(catIndices);
                 openSearchSourceConfig.setIndexNames(indexMap);
-                LOG.info("Indexes  are {} :  " , indexMap);
-                sourceInfoProvider.versionCheck(openSearchSourceConfig,sourceInfo,client,buffer);
-            }
-            else {
+                LOG.info("Indexes  are {} :  ", indexMap);
+                sourceInfoProvider.versionCheck(openSearchSourceConfig, sourceInfo, client, buffer);
+            } else {
                 LOG.info("Retry after sometime");
             }
-        }
-        catch (Exception e)
-        {
-            LOG.error("Exception occur : ",e);
+        } catch (Exception e) {
+            LOG.error("Exception occur : ", e);
         }
     }
     @Override
