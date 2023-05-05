@@ -25,9 +25,8 @@ public class ElasticSearchApiCalls implements SearchAPICalls {
     @Override
     public String generatePitId(final OpenSearchSourceConfig openSearchSourceConfig,final ElasticsearchClient client) {
         OpenPointInTimeResponse response = null;
-        StringBuilder indexList = Utility.getIndexList(openSearchSourceConfig);
         OpenPointInTimeRequest request = new OpenPointInTimeRequest.Builder().
-                index(indexList.toString()).
+                index(openSearchSourceConfig.getIndexValue()).
                 keepAlive(new Time.Builder().time(KEEP_ALIVE_VALUE).build()).build();
         LOG.info("Requet is : {} ", request);
             try {
@@ -42,18 +41,17 @@ public class ElasticSearchApiCalls implements SearchAPICalls {
     @Override
     public String searchPitIndexes(final String pitId,final OpenSearchSourceConfig openSearchSourceConfig,final ElasticsearchClient client) {
         SearchResponse<ObjectNode> searchResponse = null;
-        StringBuilder indexList = Utility.getIndexList(openSearchSourceConfig);
-            try {
-                searchResponse = client.search(req ->
-                                req.index(indexList.toString()),
-                        ObjectNode.class);
-                searchResponse.hits().hits().stream()
-                        .map(Hit::source).collect(Collectors.toList());
-                LOG.debug("Search Response {} ",searchResponse);
+        try {
+            searchResponse = client.search(req ->
+                            req.index(openSearchSourceConfig.getIndexValue()),
+                    ObjectNode.class);
+            searchResponse.hits().hits().stream()
+                    .map(Hit::source).collect(Collectors.toList());
+            LOG.debug("Search Response {} ", searchResponse);
 
-            } catch (Exception ex) {
-                LOG.error(ex.getMessage());
-            }
+        } catch (Exception ex) {
+            LOG.error(ex.getMessage());
+        }
         return searchResponse.toString();
     }
     @Override

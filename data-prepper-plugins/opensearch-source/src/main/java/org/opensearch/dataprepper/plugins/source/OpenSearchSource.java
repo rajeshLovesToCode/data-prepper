@@ -16,8 +16,12 @@ import org.opensearch.dataprepper.model.record.Record;
 import org.opensearch.dataprepper.model.source.Source;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
+
 @DataPrepperPlugin(name = "opensearch", pluginType = Source.class, pluginConfigurationType =OpenSearchSourceConfig.class)
 public class OpenSearchSource implements Source<Record<Event>> {
     private final OpenSearchSourceConfig openSearchSourceConfig;
@@ -47,8 +51,25 @@ public class OpenSearchSource implements Source<Record<Event>> {
             if (Boolean.TRUE.equals(sourceInfo.getHealthStatus())) {
                 PrepareConnection prepareConnection = new PrepareConnection();
                 client = prepareConnection.prepareElasticSearchConnection();
-                List<IndicesRecord> catIndices =  sourceInfoProvider.callCatIndices(client);
-                HashMap<String,String> indexMap = sourceInfoProvider.getIndexMap(catIndices);
+                List<IndicesRecord> catIndices = new ArrayList<>();
+                if (openSearchSourceConfig.getIndexParameters().getInclude() == null ||
+                        openSearchSourceConfig.getIndexParameters().getInclude().isEmpty()) {
+                    catIndices = sourceInfoProvider.callCatIndices(client);
+
+                    //filtering out  based on exclude indices
+                    if (openSearchSourceConfig.getIndexParameters().getExclude() != null
+                            && !openSearchSourceConfig.getIndexParameters().getExclude().isEmpty()) {
+                        catIndices = catIndices.stream().filter(c ->
+                                !(openSearchSourceConfig.getIndexParameters().getExclude().contains(c.index()))).
+                                collect(Collectors.toList());
+                    }
+
+
+                } else {
+                    sourceInfoProvider.getIndicesRecords(openSearchSourceConfig, catIndices);
+
+                }
+                HashMap<String, String> indexMap = sourceInfoProvider.getIndexMap(catIndices);
                 openSearchSourceConfig.setIndexNames(indexMap);
                 LOG.info("Indexes  are {} :  " , indexMap);
                 sourceInfoProvider.versionCheck(openSearchSourceConfig,sourceInfo,client,buffer);

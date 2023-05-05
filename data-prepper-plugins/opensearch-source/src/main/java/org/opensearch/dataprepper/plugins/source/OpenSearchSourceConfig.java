@@ -38,6 +38,7 @@ public class OpenSearchSourceConfig {
     private String socketTimeout;
     @JsonProperty("connection_timeout")
     private String connectionTimeout;
+    private String indexValue;
     private HashMap<String,String> indexNames;
     public HashMap<String, String> getIndexNames() {
         return indexNames;
@@ -81,4 +82,14 @@ public class OpenSearchSourceConfig {
     public QueryParameters getQueryParameters() {
         return queryParameters;
     }
+
+    public String getIndexValue() {
+        return indexValue;
+    }
+
+    public void setIndexValue(String indexValue) {
+        this.indexValue = indexValue;
+    }
+
+
 }

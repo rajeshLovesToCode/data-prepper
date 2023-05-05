@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 public class SourceInfoProvider {
     private String datasource;
@@ -129,19 +130,22 @@ public class SourceInfoProvider {
         if ((sourceInfo.getDataSource().equalsIgnoreCase(ELASTIC_SEARCH))
                 && (osVersionIntegerValue >= VERSION_7_10_0)) {
             ElasticSearchApiCalls elasticSearchApiCalls = new ElasticSearchApiCalls();
-            String pitId = elasticSearchApiCalls.generatePitId(openSearchSourceConfig, client);
-            LOG.info("Pit Id is  {} ", pitId);
-            String getSearchResponseBody = elasticSearchApiCalls.searchPitIndexes(pitId, openSearchSourceConfig, client);
-            LOG.info("Search After Response :{} ", getSearchResponseBody);
-            LOG.info("Delete Operation starts");
-            Boolean deleteResult = elasticSearchApiCalls.delete(pitId, client, osVersionIntegerValue);
-            if(deleteResult){
-                LOG.info("Delete operation performed successfully");
+            for (String index : openSearchSourceConfig.getIndexNames().keySet()) {
+                openSearchSourceConfig.setIndexValue(index);
+                String pitId = elasticSearchApiCalls.generatePitId(openSearchSourceConfig, client);
+                LOG.info("Pit Id is  {} ", pitId);
+                String getSearchResponseBody = elasticSearchApiCalls.searchPitIndexes(pitId, openSearchSourceConfig, client);
+                LOG.info("Search After Response :{} ", getSearchResponseBody);
+                LOG.info("Delete Operation starts");
+                Boolean deleteResult = elasticSearchApiCalls.delete(pitId, client, osVersionIntegerValue);
+                if (deleteResult) {
+                    LOG.info("Delete operation performed successfully");
+                } else {
+                    LOG.info("Delete operation failed");
+                }
+                LOG.info("Delete operation ends");
             }
-            else {
-                LOG.info("Delete operation failed");
-            }
-            LOG.info("Delete operation ends");
+
         } else if (sourceInfo.getDataSource().equalsIgnoreCase(ELASTIC_SEARCH) && (osVersionIntegerValue < VERSION_7_10_0)) {
             ElasticSearchApiCalls elasticSearchApiCalls = new ElasticSearchApiCalls();
             String scrollId = elasticSearchApiCalls.generateScrollId(openSearchSourceConfig, client);
@@ -185,5 +189,24 @@ public class SourceInfoProvider {
             indexMap.put(indexname,indexSize);
         }
         return indexMap;
+    }
+
+    public  List<IndicesRecord> getIndicesRecords(final OpenSearchSourceConfig openSearchSourceConfig,
+                                                  final List<IndicesRecord>  indicesRecords) {
+        if (openSearchSourceConfig.getIndexParameters().getExclude() != null
+                && !openSearchSourceConfig.getIndexParameters().getExclude().isEmpty()) {
+            List<String> filteredIncludeIndexes = openSearchSourceConfig.getIndexParameters().getInclude().
+                    stream()
+                    .filter(index -> !(openSearchSourceConfig.getIndexParameters().getExclude().contains(index)))
+                    .collect(Collectors.toList());
+            openSearchSourceConfig.getIndexParameters().setInclude(filteredIncludeIndexes);
+        }
+        openSearchSourceConfig.getIndexParameters().getInclude().forEach(index -> {
+            IndicesRecord indexRecord =
+                    new IndicesRecord.Builder().index(index).build();
+            indicesRecords.add(indexRecord);
+
+        });
+        return indicesRecords;
     }
 }
