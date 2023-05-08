@@ -1,0 +1,25 @@
+plugins {
+    id 'java'
+}
+
+group 'org.opensearch.dataprepper'
+version '2.3.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(path: ':data-prepper-api')
+    implementation 'co.elastic.clients:elasticsearch-java:8.7.0'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-csv'
+    implementation group: 'com.googlecode.json-simple', name: 'json-simple', version: '1.1.1'
+    implementation "org.apache.commons:commons-lang3:3.12.0"
+    implementation 'software.amazon.awssdk:aws-sdk-java:2.17.148'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+}
+
+test {
+    useJUnitPlatform()
+}
