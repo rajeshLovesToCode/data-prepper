@@ -9,6 +9,8 @@ import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.cat.indices.IndicesRecord;
 import co.elastic.clients.elasticsearch.core.ScrollRequest;
 import co.elastic.clients.elasticsearch.core.ScrollResponse;
+import co.elastic.clients.elasticsearch.core.SearchRequest;
+import co.elastic.clients.elasticsearch.core.SearchResponse;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -132,10 +134,21 @@ public class SourceInfoProvider {
             ElasticSearchApiCalls elasticSearchApiCalls = new ElasticSearchApiCalls();
             for (String index : openSearchSourceConfig.getIndexNames().keySet()) {
                 openSearchSourceConfig.setIndexValue(index);
-                String pitId = elasticSearchApiCalls.generatePitId(openSearchSourceConfig, client);
-                LOG.info("Pit Id is  {} ", pitId);
-                String getSearchResponseBody = elasticSearchApiCalls.searchPitIndexes(pitId, openSearchSourceConfig, client);
-                LOG.info("Search After Response :{} ", getSearchResponseBody);
+                // TODO: need to confirm if Pit Id is required
+              //  String pitId = elasticSearchApiCalls.generatePitId(openSearchSourceConfig, client);
+              //  LOG.info("Pit Id is  {} ", pitId);
+                if(openSearchSourceConfig.getSearchOptions().getBatchSize() > 1000) {
+                    if(!openSearchSourceConfig.getSearchOptions().getSorting().getSortKey().isEmpty()) {
+                        elasticSearchApiCalls.searchPitIndexesForPagination(openSearchSourceConfig, client, 0, buffer);
+                    }
+                    else{
+                        LOG.info("Sort must contain at least one field");
+                    }
+                }
+                else {
+                    elasticSearchApiCalls.searchPitIndexes(openSearchSourceConfig,client);
+                }
+               /* LOG.info("Search After Response :{} ", getSearchResponseBody);
                 LOG.info("Delete Operation starts");
                 Boolean deleteResult = elasticSearchApiCalls.delete(pitId, client, osVersionIntegerValue);
                 if (deleteResult) {
@@ -143,7 +156,7 @@ public class SourceInfoProvider {
                 } else {
                     LOG.info("Delete operation failed");
                 }
-                LOG.info("Delete operation ends");
+                LOG.info("Delete operation ends"); */
             }
 
         } else if (sourceInfo.getDataSource().equalsIgnoreCase(ELASTIC_SEARCH) && (osVersionIntegerValue < VERSION_7_10_0)) {
@@ -157,10 +170,11 @@ public class SourceInfoProvider {
             LOG.info("Delete operation ends");
         }
     }
-    public void writeClusterDataToBuffer(String responseBoday, Buffer<Record<Event>> buffer) throws TimeoutException {
+
+    public void writeClusterDataToBuffer(String responseBody, Buffer<Record<Event>> buffer) throws TimeoutException {
         try {
             LOG.info("Write to buffer code started {} ",buffer);
-            final JsonParser jsonParser = jsonFactory.createParser(responseBoday);
+            final JsonParser jsonParser = jsonFactory.createParser(responseBody);
             final Map<String, Object> innerJson = objectMapper.readValue(jsonParser, Map.class);
             Event event = JacksonLog.builder().withData(innerJson).build();
             Record<Event> jsonRecord = new Record<>(event);
@@ -169,9 +183,9 @@ public class SourceInfoProvider {
         }
         catch (Exception e)
         {
-            LOG.error("Unable to parse json data [{}], assuming plain text", responseBoday, e);
+            LOG.error("Unable to parse json data [{}], assuming plain text", responseBody, e);
             final Map<String, Object> plainMap = new HashMap<>();
-            plainMap.put("message", responseBoday);
+            plainMap.put("message", responseBody);
             Event event = JacksonLog.builder().withData(plainMap).build();
             Record<Event> jsonRecord = new Record<>(event);
             buffer.write(jsonRecord, 1200);
@@ -209,4 +223,5 @@ public class SourceInfoProvider {
         });
         return indicesRecords;
     }
+
 }
