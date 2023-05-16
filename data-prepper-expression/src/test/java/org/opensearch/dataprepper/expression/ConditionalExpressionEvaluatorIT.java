@@ -129,6 +129,14 @@ class ConditionalExpressionEvaluatorIT {
                 .withData(eventMap)
                 .build();
 
+        String testTag1 = RandomStringUtils.randomAlphabetic(6);
+        String testTag2 = RandomStringUtils.randomAlphabetic(7);
+        String testTag3 = RandomStringUtils.randomAlphabetic(6);
+        String testTag4 = RandomStringUtils.randomAlphabetic(7);
+        longEvent.getMetadata().addTag(testTag1);
+        longEvent.getMetadata().addTag(testTag2);
+        longEvent.getMetadata().addTag(testTag3);
+
         Random random = new Random();
         int testStringLength = random.nextInt(10);
         String testString = RandomStringUtils.randomAlphabetic(testStringLength);
@@ -141,6 +149,11 @@ class ConditionalExpressionEvaluatorIT {
                 Arguments.of("/success == /status_code", event("{\"success\": true, \"status_code\": 200}"), false),
                 Arguments.of("/success != /status_code", event("{\"success\": true, \"status_code\": 200}"), true),
                 Arguments.of("/pi == 3.14159", event("{\"pi\": 3.14159}"), true),
+                Arguments.of("/value == 12345.678", event("{\"value\": 12345.678}"), true),
+                Arguments.of("/value == 12345.678E12", event("{\"value\": 12345.678E12}"), true),
+                Arguments.of("/value == 12345.678e-12", event("{\"value\": 12345.678e-12}"), true),
+                Arguments.of("/value == 12345.0000012", event("{\"value\": 12345.0000012}"), true),
+                Arguments.of("/value == 12345.00012E6", event("{\"value\": 12345.00012E6}"), true),
                 Arguments.of("true == (/is_cool == true)", event("{\"is_cool\": true}"), true),
                 Arguments.of("not /is_cool", event("{\"is_cool\": true}"), false),
                 Arguments.of("/status_code < 300", event("{\"status_code\": 200}"), true),
@@ -166,12 +179,30 @@ class ConditionalExpressionEvaluatorIT {
                         true),
                 Arguments.of("/durationInNanos > 5000000000", event("{\"durationInNanos\": 6000000000}"), true),
                 Arguments.of("/response == \"OK\"", event("{\"response\": \"OK\"}"), true),
-                Arguments.of("length(/response) == "+testStringLength, event("{\"response\": \""+testString+"\"}"), true)
+                Arguments.of("length(/response) == "+testStringLength, event("{\"response\": \""+testString+"\"}"), true),
+                Arguments.of("hasTags(\""+ testTag1+"\")", longEvent, true),
+                Arguments.of("hasTags(\""+ testTag1+"\",\""+testTag2+"\")", longEvent, true),
+                Arguments.of("hasTags(\""+ testTag1+"\", \""+testTag2+"\", \""+testTag3+"\")", longEvent, true),
+                Arguments.of("hasTags(\""+ testTag4+"\")", longEvent, false),
+                Arguments.of("hasTags(\""+ testTag3+"\",\""+testTag4+"\")", longEvent, false)
         );
     }
 
     private static Stream<Arguments> invalidExpressionArguments() {
         Random random = new Random();
+
+        final String key = RandomStringUtils.randomAlphabetic(5);
+        final String value = RandomStringUtils.randomAlphabetic(10);
+        Map<Object, Object> eventMap = Collections.singletonMap(key, value);
+        Event tagEvent = JacksonEvent.builder()
+                .withEventType("event")
+                .withData(eventMap)
+                .build();
+        String testTag1 = RandomStringUtils.randomAlphabetic(6);
+        String testTag2 = RandomStringUtils.randomAlphabetic(7);
+        tagEvent.getMetadata().addTag(testTag1);
+        tagEvent.getMetadata().addTag(testTag2);
+
         int testStringLength = random.nextInt(10);
         String testString = RandomStringUtils.randomAlphabetic(testStringLength);
         return Stream.of(
@@ -194,7 +225,13 @@ class ConditionalExpressionEvaluatorIT {
                 Arguments.of("trueand/status_code", event("{\"status_code\": 200}")),
                 Arguments.of("trueor/status_code", event("{\"status_code\": 200}")),
                 Arguments.of("length(\""+testString+") == "+testStringLength, event("{\"response\": \""+testString+"\"}")),
-                Arguments.of("length(\""+testString+"\") == "+testStringLength, event("{\"response\": \""+testString+"\"}"))
+                Arguments.of("length(\""+testString+"\") == "+testStringLength, event("{\"response\": \""+testString+"\"}")),
+                Arguments.of("hasTags(10)", tagEvent),
+                Arguments.of("hasTags("+ testTag1+")", tagEvent),
+                Arguments.of("hasTags(\""+ testTag1+")", tagEvent),
+                Arguments.of("hasTags(\""+ testTag1+"\","+testTag2+"\")", tagEvent),
+                Arguments.of("hasTags(,\""+testTag2+"\")", tagEvent),
+                Arguments.of("hasTags(\""+testTag2+"\",)", tagEvent)
         );
     }
 
