@@ -13,7 +13,6 @@ import com.github.fge.jsonschema.core.exceptions.ProcessingException;
 import com.github.fge.jsonschema.core.report.ProcessingReport;
 import com.github.fge.jsonschema.main.JsonSchema;
 import com.github.fge.jsonschema.main.JsonSchemaFactory;
-import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientException;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
@@ -29,6 +28,7 @@ import org.opensearch.dataprepper.model.record.Record;
 import org.opensearch.dataprepper.plugins.kafka.configuration.KafkaSinkConfig;
 import org.opensearch.dataprepper.plugins.kafka.configuration.TopicConfig;
 import org.opensearch.dataprepper.plugins.kafka.sink.DLQSink;
+import org.opensearch.dataprepper.plugins.kafka.util.KafkaSinkSchemaUtils;
 import org.opensearch.dataprepper.plugins.kafka.util.MessageFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,29 +54,31 @@ public class KafkaSinkProducer<T> {
 
     private final DLQSink dlqSink;
 
-    private final CachedSchemaRegistryClient schemaRegistryClient;
-
     private final Collection<EventHandle> bufferedEventHandles;
 
     private final ExpressionEvaluator expressionEvaluator;
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     private final String tagTargetKey;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final KafkaSinkSchemaUtils schemaUtils;
 
     public KafkaSinkProducer(final Producer producer,
                              final KafkaSinkConfig kafkaSinkConfig,
                              final DLQSink dlqSink,
-                             final CachedSchemaRegistryClient schemaRegistryClient,
+                             final KafkaSinkSchemaUtils schemaUtils,
                              final ExpressionEvaluator expressionEvaluator,
-                             final String tagTargetKey) {
+                             final String tagTargetKey
+    ) {
         this.producer = producer;
         this.kafkaSinkConfig = kafkaSinkConfig;
         this.dlqSink = dlqSink;
-        this.schemaRegistryClient = schemaRegistryClient;
         bufferedEventHandles = new LinkedList<>();
         this.expressionEvaluator = expressionEvaluator;
         this.tagTargetKey = tagTargetKey;
+        this.schemaUtils = schemaUtils;
+
 
     }
 
@@ -114,20 +116,28 @@ public class KafkaSinkProducer<T> {
         return event;
     }
 
+
     private void publishPlaintextMessage(Record<Event> record, TopicConfig topic, String key, Object dataForDlq) {
         producer.send(new ProducerRecord(topic.getName(), key, record.getData().toJsonString()), callBack(dataForDlq));
     }
 
     private void publishAvroMessage(Record<Event> record, TopicConfig topic, String key, Object dataForDlq) throws RestClientException, IOException {
-        final String valueToParse = schemaRegistryClient.
-                getLatestSchemaMetadata(topic.getName() + "-value").getSchema();
-        final Schema schema = new Schema.Parser().parse(valueToParse);
-        final GenericRecord genericRecord = getGenericRecord(record.getData(), schema);
+        if (kafkaSinkConfig.getSchemaConfig().isCreate()) {
+            schemaUtils.registerSchema(topic.getName(), kafkaSinkConfig.getSchemaConfig());
+        }
+        final Schema avroSchema = schemaUtils.getSchema(topic.getName());
+        if (avroSchema == null) {
+            throw new RuntimeException("Schema definition is mandatory in case of type avro");
+        }
+        final GenericRecord genericRecord = getGenericRecord(record.getData(), avroSchema);
         producer.send(new ProducerRecord(topic.getName(), key, genericRecord), callBack(dataForDlq));
     }
 
     private void publishJsonMessage(Record<Event> record, TopicConfig topic, String key, Object dataForDlq) throws IOException, RestClientException, ProcessingException {
         final JsonNode dataNode = new ObjectMapper().convertValue(record.getData().toJsonString(), JsonNode.class);
+        if (kafkaSinkConfig.getSchemaConfig()!=null&&kafkaSinkConfig.getSchemaConfig().isCreate()) {
+            schemaUtils.registerSchema(topic.getName(), kafkaSinkConfig.getSchemaConfig());
+        }
         if (validateJson(topic.getName(), dataForDlq)) {
             producer.send(new ProducerRecord(topic.getName(), key, dataNode), callBack(dataForDlq));
         } else {
@@ -136,10 +146,10 @@ public class KafkaSinkProducer<T> {
     }
 
     private Boolean validateJson(final String topicName, Object dataForDlq) throws IOException, RestClientException, ProcessingException {
-        if (schemaRegistryClient != null) {
-            final String schemaJson = schemaRegistryClient.
-                    getLatestSchemaMetadata(topicName + "-value").getSchema();
+        final String schemaJson = schemaUtils.getValueToParse(topicName);
+        if (schemaJson != null) {
             return validateSchema(dataForDlq.toString(), schemaJson);
+
         } else {
             return true;
         }
@@ -162,6 +172,7 @@ public class KafkaSinkProducer<T> {
     private Callback callBack(final Object dataForDlq) {
         return (metadata, exception) -> {
             if (null != exception) {
+                LOG.info("Error occured while publishing "+ exception.getMessage());
                 releaseEventHandles(false);
                 dlqSink.perform(dataForDlq, exception);
             } else {

@@ -110,7 +110,7 @@ public class KafkasinkTest {
         when(pluginSetting.getPipelineName()).thenReturn("Kafka-sink");
         event = JacksonEvent.fromMessage(UUID.randomUUID().toString());
         when(sinkContext.getTagsTargetKey()).thenReturn("tag");
-        kafkaSink = new KafkaSink(pluginSetting, kafkaSinkConfig, pluginFactoryMock, mock(ExpressionEvaluator.class), sinkContext);
+        kafkaSink = new KafkaSink(pluginSetting, kafkaSinkConfig, pluginFactoryMock, mock(ExpressionEvaluator.class),sinkContext);
         spySink = spy(kafkaSink);
         executorsMockedStatic = mockStatic(Executors.class);
         props = new Properties();

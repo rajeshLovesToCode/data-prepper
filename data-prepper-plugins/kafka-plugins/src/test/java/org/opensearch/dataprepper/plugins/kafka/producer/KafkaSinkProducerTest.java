@@ -65,8 +65,6 @@ public class KafkaSinkProducerTest {
     @Mock
     private CachedSchemaRegistryClient cachedSchemaRegistryClient;
 
-    final String tag = "tag";
-
     @BeforeEach
     public void setUp() {
         event = JacksonEvent.fromMessage(UUID.randomUUID().toString());
@@ -85,7 +83,7 @@ public class KafkaSinkProducerTest {
     public void producePlainTextRecordsTest() throws ExecutionException, InterruptedException {
         when(kafkaSinkConfig.getSerdeFormat()).thenReturn("plaintext");
         MockProducer mockProducer = new MockProducer<>(true, new StringSerializer(), new StringSerializer());
-        producer = new KafkaSinkProducer(mockProducer, kafkaSinkConfig, dlqSink, cachedSchemaRegistryClient, mock(ExpressionEvaluator.class), tag);
+        producer = new KafkaSinkProducer(mockProducer, kafkaSinkConfig, dlqSink, cachedSchemaRegistryClient, mock(ExpressionEvaluator.class));
         sinkProducer = spy(producer);
         sinkProducer.produceRecords(record);
         verify(sinkProducer).produceRecords(record);
@@ -97,7 +95,7 @@ public class KafkaSinkProducerTest {
     public void produceJsonRecordsTest() throws RestClientException, IOException {
         when(kafkaSinkConfig.getSerdeFormat()).thenReturn("json");
         MockProducer mockProducer = new MockProducer<>(true, new StringSerializer(), new JsonSerializer());
-        producer = new KafkaSinkProducer(mockProducer, kafkaSinkConfig, dlqSink, cachedSchemaRegistryClient, mock(ExpressionEvaluator.class), tag);
+        producer = new KafkaSinkProducer(mockProducer, kafkaSinkConfig, dlqSink, cachedSchemaRegistryClient, mock(ExpressionEvaluator.class));
         SchemaMetadata schemaMetadata = mock(SchemaMetadata.class);
         String jsonSchema = "{\n" +
                 "  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n" +
@@ -121,7 +119,7 @@ public class KafkaSinkProducerTest {
     public void produceAvroRecordsTest() throws Exception {
         when(kafkaSinkConfig.getSerdeFormat()).thenReturn("avro");
         MockProducer mockProducer = new MockProducer<>(true, new StringSerializer(), new StringSerializer());
-        producer = new KafkaSinkProducer(mockProducer, kafkaSinkConfig, dlqSink, cachedSchemaRegistryClient, mock(ExpressionEvaluator.class), tag);
+        producer = new KafkaSinkProducer(mockProducer, kafkaSinkConfig, dlqSink, cachedSchemaRegistryClient, mock(ExpressionEvaluator.class));
         SchemaMetadata schemaMetadata = mock(SchemaMetadata.class);
         String avroSchema = "{\"type\":\"record\",\"name\":\"MyMessage\",\"fields\":[{\"name\":\"message\",\"type\":\"string\"}]}";
         when(schemaMetadata.getSchema()).thenReturn(avroSchema);
@@ -134,7 +132,7 @@ public class KafkaSinkProducerTest {
 
     @Test
     public void testGetGenericRecord() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        producer = new KafkaSinkProducer(new MockProducer(), kafkaSinkConfig, dlqSink, cachedSchemaRegistryClient, mock(ExpressionEvaluator.class), tag);
+        producer = new KafkaSinkProducer(new MockProducer(), kafkaSinkConfig, dlqSink, cachedSchemaRegistryClient, mock(ExpressionEvaluator.class));
         final Schema schema = createMockSchema();
         Method privateMethod = KafkaSinkProducer.class.getDeclaredMethod("getGenericRecord", Event.class, Schema.class);
         privateMethod.setAccessible(true);

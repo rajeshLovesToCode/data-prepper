@@ -23,6 +23,7 @@ public class TopicConfig {
     static final Duration DEFAULT_SESSION_TIMEOUT = Duration.ofSeconds(45);
     static final int DEFAULT_MAX_RETRY_ATTEMPT = Integer.MAX_VALUE;
     static final String DEFAULT_AUTO_OFFSET_RESET = "latest";
+
     static final Duration DEFAULT_THREAD_WAITING_TIME = Duration.ofSeconds(5);
     static final Duration DEFAULT_MAX_RECORD_FETCH_TIME = Duration.ofSeconds(4);
     static final Duration DEFAULT_BUFFER_TIMEOUT = Duration.ofSeconds(5);
@@ -36,6 +37,27 @@ public class TopicConfig {
     static final Integer DEFAULT_CONSUMER_MAX_POLL_RECORDS = 500;
     static final Integer DEFAULT_NUM_OF_WORKERS = 2;
     static final Duration DEFAULT_HEART_BEAT_INTERVAL_DURATION = Duration.ofSeconds(5);
+
+    static final Duration THREAD_WAITING_TIME = Duration.ofSeconds(5);
+    private static final Duration MAX_RECORD_FETCH_TIME = Duration.ofSeconds(4);
+    private static final Duration BUFFER_DEFAULT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration MAX_RETRY_DELAY = Duration.ofSeconds(1);
+    private static final Integer FETCH_MAX_BYTES = 52428800;
+    private static final Integer FETCH_MAX_WAIT = 500;
+    private static final Integer FETCH_MIN_BYTES = 1;
+    private static final Duration RETRY_BACKOFF = Duration.ofSeconds(100);
+    private static final Duration MAX_POLL_INTERVAL = Duration.ofSeconds(300000);
+    private static final Integer CONSUMER_MAX_POLL_RECORDS = 500;
+
+
+
+
+    private static final Integer NUM_OF_WORKERS = 5;
+    private static final Duration HEART_BEAT_INTERVAL_DURATION = Duration.ofSeconds(3);
+    private static final Integer NUM_OF_PARTITIONS = 3;
+    private static final Short REPLICATION_FACTOR = 1;
+
+
 
     @JsonProperty("name")
     @NotNull
@@ -131,6 +153,16 @@ public class TopicConfig {
     @Valid
     @Size(min = 1)
     private Duration heartBeatInterval= DEFAULT_HEART_BEAT_INTERVAL_DURATION;
+
+    @JsonProperty("is_create")
+    @NotNull
+    private Boolean isCreate;
+
+    @JsonProperty("number_of_partitions")
+    private Integer numberOfPartions=NUM_OF_PARTITIONS;
+
+    @JsonProperty("replication_factor")
+    private Short replicationFactor=REPLICATION_FACTOR;
 
     public String getGroupId() {
         return groupId;
@@ -280,8 +312,21 @@ public class TopicConfig {
         this.name = name;
     }
 
+
     public KafkaKeyMode getKafkaKeyMode() {
         return kafkaKeyMode;
+    }
+
+    public Boolean isCreate() {
+        return isCreate;
+    }
+
+    public Integer getNumberOfPartions() {
+        return numberOfPartions;
+    }
+
+    public Short getReplicationFactor() {
+        return replicationFactor;
     }
 
 }

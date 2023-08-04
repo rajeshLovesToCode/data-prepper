@@ -19,9 +19,12 @@ import org.opensearch.dataprepper.model.sink.AbstractSink;
 import org.opensearch.dataprepper.model.sink.Sink;
 import org.opensearch.dataprepper.model.sink.SinkContext;
 import org.opensearch.dataprepper.plugins.kafka.configuration.KafkaSinkConfig;
+import org.opensearch.dataprepper.plugins.kafka.configuration.TopicConfig;
 import org.opensearch.dataprepper.plugins.kafka.producer.KafkaSinkProducer;
 import org.opensearch.dataprepper.plugins.kafka.producer.ProducerWorker;
+import org.opensearch.dataprepper.plugins.kafka.util.KafkaSinkSchemaUtils;
 import org.opensearch.dataprepper.plugins.kafka.util.SinkPropertyConfigurer;
+import org.opensearch.dataprepper.plugins.kafka.util.TopicsUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +35,8 @@ import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Implementation class of kafka--sink plugin. It is responsible for receive the collection of
@@ -58,7 +63,12 @@ public class KafkaSink extends AbstractSink<Record<Event>> {
 
     private final ExpressionEvaluator expressionEvaluator;
 
+    private TopicsUtils topicsUtils;
+
+    private final Lock reentrantLock;
+
     private final SinkContext sinkContext;
+
 
 
     @DataPrepperPluginConstructor
@@ -69,6 +79,7 @@ public class KafkaSink extends AbstractSink<Record<Event>> {
         this.kafkaSinkConfig = kafkaSinkConfig;
         this.pluginFactory = pluginFactory;
         this.expressionEvaluator = expressionEvaluator;
+        reentrantLock = new ReentrantLock();
         this.sinkContext = sinkContext;
 
 
@@ -97,10 +108,12 @@ public class KafkaSink extends AbstractSink<Record<Event>> {
 
     @Override
     public void doOutput(Collection<Record<Event>> records) {
+        reentrantLock.lock();
         if (records.isEmpty()) {
             return;
         }
         try {
+            createTopic();
             final KafkaSinkProducer producer = createProducer();
             records.forEach(record -> {
                 producerWorker = new ProducerWorker(producer, record);
@@ -111,27 +124,27 @@ public class KafkaSink extends AbstractSink<Record<Event>> {
             LOG.error("Failed to setup the Kafka sink Plugin.", e);
             throw new RuntimeException(e.getMessage());
         }
+        reentrantLock.unlock();
+    }
+
+    private void createTopic() {
+        topicsUtils = new TopicsUtils(kafkaSinkConfig);
+        final TopicConfig topic = kafkaSinkConfig.getTopic();
+        if (topic.isCreate()) {
+            topicsUtils.createTopic(kafkaSinkConfig.getTopic().getName(), topic.getNumberOfPartions(), topic.getReplicationFactor());
+        }
     }
 
     public KafkaSinkProducer createProducer() {
         Properties properties = SinkPropertyConfigurer.getProducerProperties(kafkaSinkConfig);
         properties = Objects.requireNonNull(properties);
         return new KafkaSinkProducer(new KafkaProducer<>(properties),
-                kafkaSinkConfig, new DLQSink(pluginFactory, kafkaSinkConfig, pluginSetting), getSchemaRegistryClient(), expressionEvaluator
-                , Objects.nonNull(sinkContext) ? sinkContext.getTagsTargetKey() : null);
+                kafkaSinkConfig, new DLQSink(pluginFactory, kafkaSinkConfig, pluginSetting),
+                new KafkaSinkSchemaUtils(kafkaSinkConfig.getSerdeFormat(),kafkaSinkConfig.getSchemaConfig()),
+                expressionEvaluator,Objects.nonNull(sinkContext) ? sinkContext.getTagsTargetKey() : null);
     }
 
-    private CachedSchemaRegistryClient getSchemaRegistryClient() {
-        if (kafkaSinkConfig.getSchemaConfig() != null && kafkaSinkConfig.getSchemaConfig().getRegistryURL() != null) {
-            Properties schemaProps = new Properties();
-            SinkPropertyConfigurer.setSchemaProps(kafkaSinkConfig, schemaProps);
-            Map propertiesMap = schemaProps;
-            return new CachedSchemaRegistryClient(
-                    kafkaSinkConfig.getSchemaConfig().getRegistryURL(),
-                    100, propertiesMap);
-        }
-        return null;
-    }
+
 
     @Override
     public void shutdown() {
@@ -161,6 +174,7 @@ public class KafkaSink extends AbstractSink<Record<Event>> {
     public boolean isReady() {
         return sinkInitialized;
     }
+
 
 }
 
