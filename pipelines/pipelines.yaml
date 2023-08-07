@@ -14,17 +14,21 @@ log-pipeline :
             sts_role_arn: "arn:aws:iam::045129910014:role/dataprepper"
             region: "ap-south-1"
         partition_key: rec-${length(/message)}
-        serde_format: json
+        serde_format: avro
         topic:
-          name: json_schemaregistry_topic6
+          name: con_avro_schema_test1
           is_create: true
           number_of_partitions: 1
           replication_factor: 3
-#        schema:
-#          registry_url:  http://localhost:8085
-#          is_create: true
-#          inline_schema: "{\n    \"schema\": \"{\\\"type\\\": \\\"object\\\", \\\"properties\\\": {\\\"message\\\": {\\\"type\\\": \\\"string\\\"}}}\",\n    \"references\": [],\n    \"schemaType\": \"JSON\",\n    \"name\": \"MySchema\"\n}"
-#          schema_file_location: "D:\\project_aws\\json_schema.txt"
+        schema:
+          registry_url:  https://psrc-5mn3g.ap-southeast-2.aws.confluent.cloud
+          is_create: true
+#          inline_schema: "{\n    \"schema\": \"{\\\"type\\\":\\\"record\\\",\\\"name\\\":\\\"MyRecord\\\",\\\"fields\\\":[{\\\"name\\\":\\\"message\\\",\\\"type\\\":\\\"string\\\"}]}\",\n    \"references\": [],\n    \"schemaType\": \"AVRO\",\n    \"name\": \"MySchema\"\n}"
+          version: 1
+          basic_auth_credentials_source: USER_INFO
+          schema_registry_api_key: ZHGV4R77TKB6OLYZ
+          schema_registry_api_secret: k3VAJUh50MOrvxgKPC1xEE5s6tFvB+moAdK8xXM5/sp7eMaoiQ/sj5AKtbVFEjlu
+          schema_file_location: "/home/labuser/project/schema.json"
 #          s3_file_config:
 #            bucket_name: schemaconfuration
 #            file_key: json_schema.txt
@@ -62,19 +66,7 @@ log-pipeline :
           retry_backoff: PT2M
         authentication:
           sasl:
-            oauth:
-              oauth_client_id: 0oa9wc21447Pc5vsV5d7
-              oauth_client_secret: aGmOfHqIEvBJGDxXAOOcatiE9PvsPgoEePx8IPPa
-              oauth_login_server: https://dev-13650048.okta.com
-              oauth_login_endpoint: /oauth2/default/v1/token
-              oauth_login_grant_type: refresh_token
-              oauth_login_scope: kafka
-              oauth_introspect_server: https://dev-13650048.okta.com
-              oauth_introspect_endpoint: /oauth2/default/v1/introspect
-              oauth_token_endpoint_url: https://dev-13650048.okta.com/oauth2/default/v1/token
-              oauth_sasl_mechanism: OAUTHBEARER
-              oauth_security_protocol: SASL_SSL
-              oauth_sasl_login_callback_handler_class: org.apache.kafka.common.security.oauthbearer.secured.OAuthBearerLoginCallbackHandler
-              oauth_jwks_endpoint_url: https://dev-13650048.okta.com/oauth2/default/v1/keys
-              extension_logicalCluster: lkc-23yq8q
-              extension_identityPoolId: pool-kz0k
+            ssl_endpoint_identification_algorithm: https
+            plaintext:
+              username: HUOK2BFZF5IONVBY
+              password: +0q5YNO8VXOtxy54gZFoIdA9+IWn3YmzM7IbjXgdw3me0hyHxzUpE8WFLWA9F9yH

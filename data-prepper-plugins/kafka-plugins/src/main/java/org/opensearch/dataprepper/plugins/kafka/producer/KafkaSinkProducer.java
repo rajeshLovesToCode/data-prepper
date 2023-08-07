@@ -90,7 +90,7 @@ public class KafkaSinkProducer<T> {
         Event event = getEvent(record);
         final String key = event.formatString(kafkaSinkConfig.getPartitionKey(), expressionEvaluator);
         Object dataForDlq = event.toJsonString();
-        LOG.info("Producing record " + dataForDlq);
+       // LOG.info("Producing record " + dataForDlq);
         try {
             final String serdeFormat = kafkaSinkConfig.getSerdeFormat();
             if (MessageFormat.JSON.toString().equalsIgnoreCase(serdeFormat)) {
@@ -101,6 +101,7 @@ public class KafkaSinkProducer<T> {
                 publishPlaintextMessage(record, topic, key, dataForDlq);
             }
         } catch (Exception e) {
+            LOG.info("Error occured while publishing "+ e.getMessage());
             releaseEventHandles(false);
         }
 
@@ -123,7 +124,7 @@ public class KafkaSinkProducer<T> {
 
     private void publishAvroMessage(Record<Event> record, TopicConfig topic, String key, Object dataForDlq) throws RestClientException, IOException {
         if (kafkaSinkConfig.getSchemaConfig().isCreate()) {
-            schemaUtils.registerSchema(topic.getName(), kafkaSinkConfig.getSchemaConfig());
+            schemaUtils.registerSchema(topic.getName());
         }
         final Schema avroSchema = schemaUtils.getSchema(topic.getName());
         if (avroSchema == null) {
@@ -136,7 +137,7 @@ public class KafkaSinkProducer<T> {
     private void publishJsonMessage(Record<Event> record, TopicConfig topic, String key, Object dataForDlq) throws IOException, RestClientException, ProcessingException {
         final JsonNode dataNode = new ObjectMapper().convertValue(record.getData().toJsonString(), JsonNode.class);
         if (kafkaSinkConfig.getSchemaConfig()!=null&&kafkaSinkConfig.getSchemaConfig().isCreate()) {
-            schemaUtils.registerSchema(topic.getName(), kafkaSinkConfig.getSchemaConfig());
+            schemaUtils.registerSchema(topic.getName());
         }
         if (validateJson(topic.getName(), dataForDlq)) {
             producer.send(new ProducerRecord(topic.getName(), key, dataNode), callBack(dataForDlq));

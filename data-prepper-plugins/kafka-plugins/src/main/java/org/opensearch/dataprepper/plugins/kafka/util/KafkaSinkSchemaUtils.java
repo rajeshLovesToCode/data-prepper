@@ -2,8 +2,10 @@ package org.opensearch.dataprepper.plugins.kafka.util;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.confluent.kafka.schemaregistry.ParsedSchema;
 import io.confluent.kafka.schemaregistry.client.CachedSchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.client.rest.RestService;
+import io.confluent.kafka.schemaregistry.client.rest.entities.requests.RegisterSchemaRequest;
 import io.confluent.kafka.schemaregistry.client.rest.entities.requests.RegisterSchemaResponse;
 import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientException;
 import org.apache.avro.Schema;
@@ -40,8 +42,14 @@ public class KafkaSinkSchemaUtils {
     private static String ACCEPT_KEY = "Accept";
     private static String METHOD_HEADER_KEY = "Method";
 
+    private final SchemaConfig schemaConfig;
+
+    private final String serdeFormat;
+
     public KafkaSinkSchemaUtils(final String serdeFormat, final SchemaConfig schemaConfig) {
-        this.schemaRegistryClient = getSchemaRegistryClient(serdeFormat, schemaConfig);
+        this.serdeFormat=serdeFormat;
+        this.schemaConfig=schemaConfig;
+        this.schemaRegistryClient = getSchemaRegistryClient();
     }
 
     public Schema getSchema(final String topic) {
@@ -57,7 +65,7 @@ public class KafkaSinkSchemaUtils {
         try {
             if(schemaRegistryClient!=null) {
                 return schemaRegistryClient.
-                        getLatestSchemaMetadata(topic + "-value").getSchema();
+                        getLatestSchemaMetadata(topic).getSchema();
             }
         } catch (IOException | RestClientException e) {
             LOG.error(e.getMessage());
@@ -66,36 +74,35 @@ public class KafkaSinkSchemaUtils {
     }
 
 
-    public void registerSchema(final String topic, final SchemaConfig schemaConfig) {
+    public void registerSchema(final String topic) {
         try {
-            String schemaString = getSchemaString(topic, schemaConfig);
-            final RegisterSchemaResponse registerSchemaResponse = register(topic, schemaConfig, schemaString);
+            final String schemaString = getSchemaString();
+            final RegisterSchemaResponse registerSchemaResponse = register(topic, schemaString);
             if (registerSchemaResponse == null) {
                 throw new RuntimeException("Schema Registeration failed");
             }
             LOG.info("Schema registered Successfully");
 
         } catch (Exception e) {
-            LOG.error("error occured while  schema registeration ");
+            LOG.info("error occured while  schema registeration ");
+            throw new RuntimeException("error occured while  schema registeration "+e.getMessage());
         }
     }
 
-    private RegisterSchemaResponse register(final String topic, final SchemaConfig schemaConfig, final String schemaString) throws IOException, RestClientException {
+    private RegisterSchemaResponse register(final String topic,final String schemaString) throws IOException, RestClientException {
         final RestService restService = new RestService(schemaConfig.getRegistryURL());
-        final String path = "/subjects/" + topic + "-value/versions";
-        TypeReference<RegisterSchemaResponse> REGISTER_RESPONSE_TYPE = new TypeReference<RegisterSchemaResponse>() {
-        };
-        Map requestProperties = getRequestProperties();
-
+        restService.configure(getSchemaProperties());
+        final String path = "/subjects/" + topic + "/versions?normalize=false";
         return restService.
                 httpRequest(path, method,
                         schemaString.getBytes(StandardCharsets.UTF_8),
-                        requestProperties, REGISTER_RESPONSE_TYPE);
+                        getRequestProperties(),new TypeReference<RegisterSchemaResponse>() {
+                        });
     }
 
     @NotNull
-    private String getSchemaString(final String topic, final SchemaConfig schemaConfig) throws IOException {
-        String schemaString = getSchemaDefinition(schemaConfig);
+    private String getSchemaString() throws IOException {
+        String schemaString = getSchemaDefinition();
         if (schemaString == null) {
             throw new RuntimeException("Invalid schema definition");
         }
@@ -105,13 +112,25 @@ public class KafkaSinkSchemaUtils {
     @NotNull
     private Map getRequestProperties() {
         Map requestProperties = new HashMap();
-        requestProperties.put(CONTENT_TYPE_KEY, CONTENT_TYPE_JSON_VALUE);
-        requestProperties.put(ACCEPT_KEY, CONTENT_TYPE_JSON_VALUE);
+        requestProperties.put(CONTENT_TYPE_KEY, "application/vnd.schemaregistry.v1+json");
+       /* requestProperties.put(ACCEPT_KEY, CONTENT_TYPE_JSON_VALUE);
         requestProperties.put(METHOD_HEADER_KEY, method);
+
+        if (!ObjectUtils.isEmpty(schemaConfig.getBasicAuthCredentialsSource())) {
+            requestProperties.put(CREDENTIALS_SOURCE, schemaConfig.getBasicAuthCredentialsSource());
+        }
+        if (!ObjectUtils.isEmpty(schemaConfig.getSchemaRegistryApiKey()) && !(ObjectUtils.isEmpty(schemaConfig.getSchemaRegistryApiSecret()))) {
+            final String apiKey = schemaConfig.getSchemaRegistryApiKey();
+            final String apiSecret = schemaConfig.getSchemaRegistryApiSecret();
+            requestProperties.put(REGISTRY_BASIC_AUTH_USER_INFO, apiKey + ":" + apiSecret);
+        }
+        requestProperties.put("sasl.mechanism", "PLAIN");
+        requestProperties.put("sasl.jaas.config", "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"HUOK2BFZF5IONVBY\" password=\"+0q5YNO8VXOtxy54gZFoIdA9+IWn3YmzM7IbjXgdw3me0hyHxzUpE8WFLWA9F9yH\";");
+        requestProperties.put("security.protocol", "SASL_SSL");*/
         return requestProperties;
     }
 
-    public String getSchemaDefinition(final SchemaConfig schemaConfig) throws IOException {
+    public String getSchemaDefinition() throws IOException {
         if (schemaConfig.getInlineSchema() != null) {
             return schemaConfig.getInlineSchema();
         } else if (schemaConfig.getSchemaFileLocation() != null) {
@@ -173,17 +192,17 @@ public class KafkaSinkSchemaUtils {
         }
     }
 
-    private CachedSchemaRegistryClient getSchemaRegistryClient(final String serdeFormat, final SchemaConfig schemaConfig) {
+    private CachedSchemaRegistryClient getSchemaRegistryClient() {
         if (schemaConfig != null && schemaConfig.getRegistryURL() != null) {
             return new CachedSchemaRegistryClient(
                     schemaConfig.getRegistryURL(),
-                    100, getSchemaProperties(serdeFormat, schemaConfig));
+                    100, getSchemaProperties());
         }
         return null;
     }
 
     @NotNull
-    private Map getSchemaProperties(String serdeFormat, SchemaConfig schemaConfig) {
+    private Map getSchemaProperties() {
         Properties schemaProps = new Properties();
         SinkPropertyConfigurer.setSchemaProps(serdeFormat, schemaConfig, schemaProps);
         Map propertiesMap = schemaProps;
