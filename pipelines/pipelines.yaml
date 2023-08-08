@@ -1,11 +1,14 @@
 log-pipeline :
   source :
-    random:
+     file:
+      path: D:\project_aws\input.json
+      format: json
+      record_type: event
   sink :
     - kafka:
         tags_target_key: Tag
         bootstrap_servers:
-          - "pkc-l7pr2.ap-south-1.aws.confluent.cloud:9092"
+          - "localhost:29092"
         thread_wait_time: 1000
         dlq:
           s3:
@@ -13,22 +16,22 @@ log-pipeline :
             key_path_prefix: "dlq-files/"
             sts_role_arn: "arn:aws:iam::045129910014:role/dataprepper"
             region: "ap-south-1"
-        partition_key: rec-${length(/message)}
+        partition_key: rec-${length(/Year)}
         serde_format: avro
         topic:
-          name: con_avro_schema_test1
+          name: doc_avro_shema_test2
           is_create: true
           number_of_partitions: 1
-          replication_factor: 3
+          replication_factor: 1
         schema:
-          registry_url:  https://psrc-5mn3g.ap-southeast-2.aws.confluent.cloud
+          registry_url:  http://localhost:8085
           is_create: true
 #          inline_schema: "{\n    \"schema\": \"{\\\"type\\\":\\\"record\\\",\\\"name\\\":\\\"MyRecord\\\",\\\"fields\\\":[{\\\"name\\\":\\\"message\\\",\\\"type\\\":\\\"string\\\"}]}\",\n    \"references\": [],\n    \"schemaType\": \"AVRO\",\n    \"name\": \"MySchema\"\n}"
           version: 1
-          basic_auth_credentials_source: USER_INFO
-          schema_registry_api_key: ZHGV4R77TKB6OLYZ
-          schema_registry_api_secret: k3VAJUh50MOrvxgKPC1xEE5s6tFvB+moAdK8xXM5/sp7eMaoiQ/sj5AKtbVFEjlu
-          schema_file_location: "/home/labuser/project/schema.json"
+#          basic_auth_credentials_source: USER_INFO
+#          schema_registry_api_key: ZHGV4R77TKB6OLYZ
+#          schema_registry_api_secret: k3VAJUh50MOrvxgKPC1xEE5s6tFvB+moAdK8xXM5/sp7eMaoiQ/sj5AKtbVFEjlu
+          schema_file_location: D:\project_aws\schemadef.json
 #          s3_file_config:
 #            bucket_name: schemaconfuration
 #            file_key: json_schema.txt
@@ -66,7 +69,6 @@ log-pipeline :
           retry_backoff: PT2M
         authentication:
           sasl:
-            ssl_endpoint_identification_algorithm: https
             plaintext:
-              username: HUOK2BFZF5IONVBY
-              password: +0q5YNO8VXOtxy54gZFoIdA9+IWn3YmzM7IbjXgdw3me0hyHxzUpE8WFLWA9F9yH
+              username: broker
+              password: broker

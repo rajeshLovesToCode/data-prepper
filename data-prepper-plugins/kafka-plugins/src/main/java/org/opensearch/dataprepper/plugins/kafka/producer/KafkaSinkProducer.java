@@ -17,6 +17,7 @@ import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientExcept
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -26,7 +27,6 @@ import org.opensearch.dataprepper.model.event.EventHandle;
 import org.opensearch.dataprepper.model.log.JacksonLog;
 import org.opensearch.dataprepper.model.record.Record;
 import org.opensearch.dataprepper.plugins.kafka.configuration.KafkaSinkConfig;
-import org.opensearch.dataprepper.plugins.kafka.configuration.TopicConfig;
 import org.opensearch.dataprepper.plugins.kafka.sink.DLQSink;
 import org.opensearch.dataprepper.plugins.kafka.util.KafkaSinkSchemaUtils;
 import org.opensearch.dataprepper.plugins.kafka.util.MessageFormat;
@@ -64,6 +64,10 @@ public class KafkaSinkProducer<T> {
 
     private final KafkaSinkSchemaUtils schemaUtils;
 
+    private final String topicName;
+
+    private final String serdeFormat;
+
     public KafkaSinkProducer(final Producer producer,
                              final KafkaSinkConfig kafkaSinkConfig,
                              final DLQSink dlqSink,
@@ -78,6 +82,8 @@ public class KafkaSinkProducer<T> {
         this.expressionEvaluator = expressionEvaluator;
         this.tagTargetKey = tagTargetKey;
         this.schemaUtils = schemaUtils;
+        this.topicName = ObjectUtils.isEmpty(kafkaSinkConfig.getTopic()) ? null : kafkaSinkConfig.getTopic().getName();
+        this.serdeFormat = ObjectUtils.isEmpty(kafkaSinkConfig.getSerdeFormat()) ? null : kafkaSinkConfig.getSerdeFormat();
 
 
     }
@@ -86,28 +92,24 @@ public class KafkaSinkProducer<T> {
         if (record.getData().getEventHandle() != null) {
             bufferedEventHandles.add(record.getData().getEventHandle());
         }
-        TopicConfig topic = kafkaSinkConfig.getTopic();
         Event event = getEvent(record);
         final String key = event.formatString(kafkaSinkConfig.getPartitionKey(), expressionEvaluator);
-        Object dataForDlq = event.toJsonString();
-       // LOG.info("Producing record " + dataForDlq);
         try {
-            final String serdeFormat = kafkaSinkConfig.getSerdeFormat();
             if (MessageFormat.JSON.toString().equalsIgnoreCase(serdeFormat)) {
-                publishJsonMessage(record, topic, key, dataForDlq);
+                publishJsonMessage(record, key);
             } else if (MessageFormat.AVRO.toString().equalsIgnoreCase(serdeFormat)) {
-                publishAvroMessage(record, topic, key, dataForDlq);
+                publishAvroMessage(record, key);
             } else {
-                publishPlaintextMessage(record, topic, key, dataForDlq);
+                publishPlaintextMessage(record, key);
             }
         } catch (Exception e) {
-            LOG.info("Error occured while publishing "+ e.getMessage());
+            LOG.error("Error occured while publishing " + e.getMessage());
             releaseEventHandles(false);
         }
 
     }
 
-    private Event getEvent(Record<Event> record) {
+    private Event getEvent(final Record<Event> record) {
         Event event = record.getData();
         try {
             event = addTagsToEvent(event, tagTargetKey);
@@ -118,38 +120,43 @@ public class KafkaSinkProducer<T> {
     }
 
 
-    private void publishPlaintextMessage(Record<Event> record, TopicConfig topic, String key, Object dataForDlq) {
-        producer.send(new ProducerRecord(topic.getName(), key, record.getData().toJsonString()), callBack(dataForDlq));
+    private void publishPlaintextMessage(final Record<Event> record, final String key) {
+        send(topicName, key, record.getData().toJsonString());
     }
 
-    private void publishAvroMessage(Record<Event> record, TopicConfig topic, String key, Object dataForDlq) throws RestClientException, IOException {
+    private void publishAvroMessage(final Record<Event> record, final String key) {
         if (kafkaSinkConfig.getSchemaConfig().isCreate()) {
-            schemaUtils.registerSchema(topic.getName());
+            schemaUtils.registerSchema(topicName);
         }
-        final Schema avroSchema = schemaUtils.getSchema(topic.getName());
+        final Schema avroSchema = schemaUtils.getSchema(topicName);
         if (avroSchema == null) {
             throw new RuntimeException("Schema definition is mandatory in case of type avro");
         }
         final GenericRecord genericRecord = getGenericRecord(record.getData(), avroSchema);
-        producer.send(new ProducerRecord(topic.getName(), key, genericRecord), callBack(dataForDlq));
+        send(topicName, key, genericRecord);
     }
 
-    private void publishJsonMessage(Record<Event> record, TopicConfig topic, String key, Object dataForDlq) throws IOException, RestClientException, ProcessingException {
+    private void send(final String topicName, final String key, final Object record) {
+        producer.send(new ProducerRecord(topicName, key, record), callBack(record));
+    }
+
+    private void publishJsonMessage(final Record<Event> record, final String key) throws IOException, RestClientException, ProcessingException {
         final JsonNode dataNode = new ObjectMapper().convertValue(record.getData().toJsonString(), JsonNode.class);
-        if (kafkaSinkConfig.getSchemaConfig()!=null&&kafkaSinkConfig.getSchemaConfig().isCreate()) {
-            schemaUtils.registerSchema(topic.getName());
+        if (kafkaSinkConfig.getSchemaConfig() != null && kafkaSinkConfig.getSchemaConfig().isCreate()) {
+            schemaUtils.registerSchema(topicName);
         }
-        if (validateJson(topic.getName(), dataForDlq)) {
-            producer.send(new ProducerRecord(topic.getName(), key, dataNode), callBack(dataForDlq));
+
+        if (validateJson(topicName, record.getData().toJsonString())) {
+            send(topicName, key, dataNode);
         } else {
-            dlqSink.perform(dataForDlq, new RuntimeException("Invalid Json"));
+            dlqSink.perform(dataNode, new RuntimeException("Invalid Json"));
         }
     }
 
-    private Boolean validateJson(final String topicName, Object dataForDlq) throws IOException, RestClientException, ProcessingException {
+    private Boolean validateJson(final String topicName, final String jsonData) throws IOException, ProcessingException {
         final String schemaJson = schemaUtils.getValueToParse(topicName);
         if (schemaJson != null) {
-            return validateSchema(dataForDlq.toString(), schemaJson);
+            return validateSchema(jsonData, schemaJson);
 
         } else {
             return true;
@@ -163,17 +170,13 @@ public class KafkaSinkProducer<T> {
         JsonSchemaFactory schemaFactory = JsonSchemaFactory.byDefault();
         JsonSchema schema = schemaFactory.getJsonSchema(schemaNode);
         ProcessingReport report = schema.validate(dataNode);
-        if (report.isSuccess()) {
-            return true;
-        } else {
-            return false;
-        }
+        return report!=null? report.isSuccess():false;
     }
 
     private Callback callBack(final Object dataForDlq) {
         return (metadata, exception) -> {
             if (null != exception) {
-                LOG.info("Error occured while publishing "+ exception.getMessage());
+                LOG.error("Error occured while publishing " + exception.getMessage());
                 releaseEventHandles(false);
                 dlqSink.perform(dataForDlq, exception);
             } else {
@@ -198,7 +201,7 @@ public class KafkaSinkProducer<T> {
         bufferedEventHandles.clear();
     }
 
-    private Event addTagsToEvent(Event event, String tagsTargetKey) throws JsonProcessingException {
+    private Event addTagsToEvent(final Event event, final String tagsTargetKey) throws JsonProcessingException {
         String eventJsonString = event.jsonBuilder().includeTags(tagsTargetKey).toJsonString();
         Map<String, Object> eventData = objectMapper.readValue(eventJsonString, new TypeReference<>() {
         });
