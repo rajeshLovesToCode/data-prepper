@@ -13,7 +13,6 @@ import com.github.fge.jsonschema.core.exceptions.ProcessingException;
 import com.github.fge.jsonschema.core.report.ProcessingReport;
 import com.github.fge.jsonschema.main.JsonSchema;
 import com.github.fge.jsonschema.main.JsonSchemaFactory;
-import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientException;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
@@ -27,8 +26,8 @@ import org.opensearch.dataprepper.model.event.EventHandle;
 import org.opensearch.dataprepper.model.log.JacksonLog;
 import org.opensearch.dataprepper.model.record.Record;
 import org.opensearch.dataprepper.plugins.kafka.configuration.KafkaSinkConfig;
+import org.opensearch.dataprepper.plugins.kafka.service.SchemaService;
 import org.opensearch.dataprepper.plugins.kafka.sink.DLQSink;
-import org.opensearch.dataprepper.plugins.kafka.util.KafkaSinkSchemaUtils;
 import org.opensearch.dataprepper.plugins.kafka.util.MessageFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,16 +61,16 @@ public class KafkaSinkProducer<T> {
 
     private final String tagTargetKey;
 
-    private final KafkaSinkSchemaUtils schemaUtils;
-
     private final String topicName;
 
     private final String serdeFormat;
 
+    private final SchemaService schemaService;
+
+
     public KafkaSinkProducer(final Producer producer,
                              final KafkaSinkConfig kafkaSinkConfig,
                              final DLQSink dlqSink,
-                             final KafkaSinkSchemaUtils schemaUtils,
                              final ExpressionEvaluator expressionEvaluator,
                              final String tagTargetKey
     ) {
@@ -81,9 +80,9 @@ public class KafkaSinkProducer<T> {
         bufferedEventHandles = new LinkedList<>();
         this.expressionEvaluator = expressionEvaluator;
         this.tagTargetKey = tagTargetKey;
-        this.schemaUtils = schemaUtils;
         this.topicName = ObjectUtils.isEmpty(kafkaSinkConfig.getTopic()) ? null : kafkaSinkConfig.getTopic().getName();
         this.serdeFormat = ObjectUtils.isEmpty(kafkaSinkConfig.getSerdeFormat()) ? null : kafkaSinkConfig.getSerdeFormat();
+        schemaService = new SchemaService.SchemaServiceBuilder().getFetchSchemaService(topicName, kafkaSinkConfig.getSchemaConfig()).build();
 
 
     }
@@ -125,10 +124,7 @@ public class KafkaSinkProducer<T> {
     }
 
     private void publishAvroMessage(final Record<Event> record, final String key) {
-        if (kafkaSinkConfig.getSchemaConfig().isCreate()) {
-            schemaUtils.registerSchema(topicName);
-        }
-        final Schema avroSchema = schemaUtils.getSchema(topicName);
+        final Schema avroSchema = schemaService.getSchema(topicName);
         if (avroSchema == null) {
             throw new RuntimeException("Schema definition is mandatory in case of type avro");
         }
@@ -140,12 +136,8 @@ public class KafkaSinkProducer<T> {
         producer.send(new ProducerRecord(topicName, key, record), callBack(record));
     }
 
-    private void publishJsonMessage(final Record<Event> record, final String key) throws IOException, RestClientException, ProcessingException {
+    private void publishJsonMessage(final Record<Event> record, final String key) throws IOException, ProcessingException {
         final JsonNode dataNode = new ObjectMapper().convertValue(record.getData().toJsonString(), JsonNode.class);
-        if (kafkaSinkConfig.getSchemaConfig() != null && kafkaSinkConfig.getSchemaConfig().isCreate()) {
-            schemaUtils.registerSchema(topicName);
-        }
-
         if (validateJson(topicName, record.getData().toJsonString())) {
             send(topicName, key, dataNode);
         } else {
@@ -154,7 +146,7 @@ public class KafkaSinkProducer<T> {
     }
 
     private Boolean validateJson(final String topicName, final String jsonData) throws IOException, ProcessingException {
-        final String schemaJson = schemaUtils.getValueToParse(topicName);
+        final String schemaJson = schemaService.getValueToParse(topicName);
         if (schemaJson != null) {
             return validateSchema(jsonData, schemaJson);
 
@@ -170,7 +162,7 @@ public class KafkaSinkProducer<T> {
         JsonSchemaFactory schemaFactory = JsonSchemaFactory.byDefault();
         JsonSchema schema = schemaFactory.getJsonSchema(schemaNode);
         ProcessingReport report = schema.validate(dataNode);
-        return report!=null? report.isSuccess():false;
+        return report != null ? report.isSuccess() : false;
     }
 
     private Callback callBack(final Object dataForDlq) {

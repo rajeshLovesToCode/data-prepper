@@ -53,8 +53,7 @@ public class SchemaConfig {
   private S3FileConfig s3FileConfig;
 
   @JsonProperty("is_create")
-  @NotNull
-  private Boolean isCreate;
+  private Boolean isCreate=Boolean.FALSE;
 
   public static class S3FileConfig {
     @Valid
@@ -131,7 +130,12 @@ public class SchemaConfig {
 
   @AssertTrue(message = "Only one of Inline schema or Schema file location or S3 file config config must be specified")
   public boolean hasOnlyOneConfig() {
-    return Stream.of(inlineSchema, schemaFileLocation, s3FileConfig).filter(n -> n != null).count() == 1;
+    if(isCreate) {
+      return Stream.of(inlineSchema, schemaFileLocation, s3FileConfig).filter(n -> n != null).count() == 1;
+    }
+    else{
+      return true;
+    }
   }
 
   public Boolean isCreate() {

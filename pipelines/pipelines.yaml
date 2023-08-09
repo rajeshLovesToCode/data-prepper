@@ -19,18 +19,14 @@ log-pipeline :
         partition_key: rec-${length(/Year)}
         serde_format: avro
         topic:
-          name: doc_avro_shema_test2
+          name: avro_test_topic
           is_create: true
           number_of_partitions: 1
           replication_factor: 1
         schema:
           registry_url:  http://localhost:8085
           is_create: true
-#          inline_schema: "{\n    \"schema\": \"{\\\"type\\\":\\\"record\\\",\\\"name\\\":\\\"MyRecord\\\",\\\"fields\\\":[{\\\"name\\\":\\\"message\\\",\\\"type\\\":\\\"string\\\"}]}\",\n    \"references\": [],\n    \"schemaType\": \"AVRO\",\n    \"name\": \"MySchema\"\n}"
           version: 1
-#          basic_auth_credentials_source: USER_INFO
-#          schema_registry_api_key: ZHGV4R77TKB6OLYZ
-#          schema_registry_api_secret: k3VAJUh50MOrvxgKPC1xEE5s6tFvB+moAdK8xXM5/sp7eMaoiQ/sj5AKtbVFEjlu
           schema_file_location: D:\project_aws\schemadef.json
 #          s3_file_config:
 #            bucket_name: schemaconfuration

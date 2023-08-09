@@ -181,6 +181,10 @@ public class SinkPropertyConfigurer {
         if (registryURL != null && !registryURL.isEmpty()) {
             properties.put(REGISTRY_URL, registryURL);
         }
+        setSchemaCredentialsConfig(schemaConfig, properties);
+    }
+
+    public static void setSchemaCredentialsConfig(SchemaConfig schemaConfig, Properties properties) {
         if (!ObjectUtils.isEmpty(schemaConfig.getBasicAuthCredentialsSource())) {
             properties.put(CREDENTIALS_SOURCE, schemaConfig.getBasicAuthCredentialsSource());
         }
